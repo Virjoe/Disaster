@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kamayohan Negros Disaster Portal</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+<style>
+:root{
+  --bg:#fff; --header:#000; --text:#000; --accent:#111;
+  --critical:#dc2626; --warning:#f58220; --advisory:#facc15; --clear:#2f9e41;
+}
+body{margin:0;font-family:'Segoe UI',sans-serif;background:var(--bg);color:var(--text);}
+header{background:var(--header);color:var(--bg);padding:20px;text-align:center;box-shadow:0 4px 8px rgba(0,0,0,0.2);}
+header h1{margin:0;font-size:2rem;}
+header p{margin:4px 0 0;color:#ccc;}
+#clock{font-weight:bold;display:block;margin-top:4px;}
+.container{display:flex;gap:16px;padding:16px;}
+.left-column{flex:1;min-width:400px;position:sticky;top:16px;height:60vh;} /* shorter map */
+.right-column{flex:2;min-width:300px;overflow-y:auto;height:90vh;}
+.card{background:#fff;border-radius:12px;padding:16px;box-shadow:0 4px 12px rgba(0,0,0,0.05);margin-bottom:16px;
+opacity:0;transform:translateY(40px);transition:all 0.8s ease;}
+.card.visible{opacity:1;transform:translateY(0);}
+.card:hover{transform:scale(1.03);box-shadow:0 8px 20px rgba(0,0,0,0.15);}
+button{width:100%;padding:10px;margin:6px 0;background:var(--header);color:var(--bg);border:none;border-radius:8px;cursor:pointer;font-weight:bold;transition:0.3s;}
+button:hover{background:var(--accent);transform:scale(1.05);}
+.badge{padding:4px 10px;border-radius:999px;font-weight:bold;color:#fff;transition:transform 0.3s;}
+.CRITICAL{background:var(--critical);}
+.WARNING{background:var(--warning);}
+.ADVISORY{background:var(--advisory);color:#000;}
+.ALLCLEAR{background:var(--clear);}
+ul{padding-left:18px;line-height:1.5;}
+#map{height:100%;border-radius:12px;}
+.spinner{width:30px;height:30px;border:4px solid #ccc;border-top:4px solid var(--text);border-radius:50%;animation:spin 1s linear infinite;margin:10px auto;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.flash-marker{animation:flash 1s infinite alternate;}
+@keyframes flash{0%{opacity:1;}50%{opacity:0.2;}100%{opacity:1;}}
+.twitter-container{margin-top:20px;position:sticky;top:16px;}
+</style>
+</head>
+<body>
+
+<header>
+<h1>Kamayohan Negros Disaster Portal</h1>
+<p>Negros Occidental – Real-time Disaster Preparedness & Emergency Response</p>
+<strong id="clock"></strong>
+</header>
+
+<div class="container">
+<div class="left-column">
+<div id="map"></div>
+</div>
+
+<div class="right-column">
+
+<!-- Request Help -->
+<div class="card visible">
+<h3>Request Emergency Help</h3>
+<button id="requestHelpBtn">Request Help – Share My Location</button>
+<div id="requestConfirm" style="display:none;padding:10px;margin-top:6px;background:#111;color:#fff;border-radius:8px;">
+<p>Are you sure you want to share your location for rescue?</p>
+<button onclick="confirmHelp()">Yes, Request Help</button>
+<button onclick="cancelHelp()">Cancel</button>
+</div>
+<p id="helpStatus"></p>
+</div>
+
+<!-- City buttons -->
+<div class="card visible">
+<h3>Select City</h3>
+<button onclick="loadCity('Bacolod')">Bacolod City</button>
+<button onclick="loadCity('Silay')">Silay City</button>
+<button onclick="loadCity('Talisay')">Talisay City</button>
+<button onclick="loadCity('Bago')">Bago City</button>
+<button onclick="loadCity('Victorias')">Victorias City</button>
+<button onclick="loadCity('Kabankalan')">Kabankalan City</button>
+</div>
+
+<!-- City status -->
+<div class="card visible">
+<h3 id="cityTitle">City Status</h3>
+<div id="cityContent"><p>City weather and bulletin will appear here.</p></div>
+<ul id="advisoryList"></ul>
+<ul id="hotlineList"></ul>
+</div>
+
+<!-- Public Advisory & Latest Bulletins -->
+<div class="card visible">
+<h3>Public Advisories & Latest Bulletins</h3>
+
+<div id="publicAdvisory">
+<ul>
+<li><strong>SUSPENSION OF CLASSES - All Levels</strong> (safety)<br>
+Due to Typhoon Pepito, all classes in Negros Occidental are SUSPENDED starting December 11, 2024 (6:00 PM) until further notice. Citizens should follow safety protocols.<br>
+<Issued: 1/7/2026, 12:19:50 AM></li>
+
+<li><strong>Dormitory / Shelter Safety Protocols</strong> (evacuation)<br>
+Residents in shelters and dormitories must remain indoors. Emergency supplies and meals are available. Supervisors are on duty 24/7.<br>
+Main evacuation centers:<br>
+- Bacolod City: Bacolod Sports Complex, Barangay Villamonte Covered Court<br>
+- Silay City: Silay North High School Covered Court<br>
+- Talisay City: Talisay Covered Court<br>
+<Issued: 1/7/2026, 12:49:50 AM></li>
+
+<li><strong>City Closure Notice</strong> (safety)<br>
+All municipal offices and non-essential facilities are CLOSED until weather conditions improve. Security teams are monitoring facilities.<br>
+<Issued: 1/6/2026, 11:19:50 PM></li>
+
+<li><strong>Citizen Emergency Support</strong> (evacuation)<br>
+Provincial DRRMO and City CDRRM offices are coordinating emergency assistance. Citizens needing evacuation or support should contact local offices immediately.<br>
+<Issued: 1/7/2026, 12:34:50 AM></li>
+
+<li><strong>Health and Safety Reminders</strong> (health)<br>
+- Boil drinking water<br>
+- Avoid floodwaters<br>
+- Keep emergency supplies ready<br>
+- Stay informed through official channels<br>
+Emergency medical teams are on standby.<br>
+<Issued: 1/7/2026, 12:59:50 AM></li>
+
+<li><strong>Online / Communication Advisory</strong> (weather)<br>
+Stay tuned to the Negros DRRMO website, SMS alerts, and social media for updates. Internet connectivity may be affected during typhoon.<br>
+<Issued: 1/7/2026, 12:29:50 AM></li>
+</ul>
+</div>
+
+<div id="bulletinContent">
+<h4>Latest Bulletins</h4>
+<ul>
+<li><strong>WEATHER BULLETIN #5 - Typhoon Pepito (Man-yi)</strong> (HIGH)<br>
+ISSUED: 1/7/2026, 1:19:20 AM<br>
+Location: 450 km East of Negros Occidental<br>
+Moving: West-Northwest at 20 km/h<br>
+Max Winds: 120 km/h, Gusts up to 150 km/h<br>
+Forecast: Moderate to heavy rainfall, possible flooding in low-lying areas<br>
+Precautions: Evacuate if in coastal areas, secure homes, follow advisories<br>
+Next bulletin in 3 hours or as situation warrants.<br>
+Source: PAGASA</li>
+
+<li><strong>Security Status Update</strong> (HIGH)<br>
+All evacuation centers and city offices are secure. Emergency response teams are on standby.<br>
+<Issued: 1/7/2026, 12:44:20 AM></li>
+
+<li><strong>Power and Internet Status</strong> (MEDIUM)<br>
+Power stable; backup generators ready. Internet may be intermittent.<br>
+<Issued: 1/7/2026, 12:29:20 AM></li>
+
+<li><strong>Citizen Support Services Update</strong> (MEDIUM)<br>
+Provincial DRRMO coordinating with LGUs for evacuation and relief. Food and emergency supplies available.<br>
+<Issued: 1/6/2026, 11:49:20 PM></li>
+
+<li><strong>Class / Work Resumption Guidelines</strong> (LOW)<br>
+Authorities will announce resumption after typhoon passes and safety assessment is completed. Citizens notified via official channels.<br>
+<Issued: 1/6/2026, 11:19:20 PM></li>
+</ul>
+</div>
+</div>
+
+<!-- Nearest Evacuation Centers -->
+<div class="card visible">
+<h3>Nearest Evacuation Centers</h3>
+<div id="evacCenters">
+<ul>
+<li>Bacolod City: Bacolod City Sports Complex, Barangay Villamonte Covered Court</li>
+<li>Silay City: Silay North High School Covered Court</li>
+<li>Talisay City: Talisay City Covered Court</li>
+<li>Bago City: Bago City Hall Covered Court</li>
+<li>Victorias City: Victorias City Covered Court</li>
+<li>Kabankalan City: Kabankalan City Covered Court</li>
+</ul>
+</div>
+</div>
+
+<!-- Tips -->
+<div class="card visible">
+<h3>Disaster Preparedness Tips</h3>
+<ul>
+<li>Before: Secure home, stock up on water/food, keep documents safe</li>
+<li>During: Stay indoors, follow advisories, evacuate if ordered</li>
+<li>After: Avoid floodwaters, check hazards, report emergencies</li>
+</ul>
+</div>
+
+<!-- Typhoon Season -->
+<div class="card visible">
+<h3>Typhoon Season Projection 2025-2026</h3>
+<ul>
+<li>Dec 2025: 2 typhoons</li>
+<li>Jan 2026: 1 typhoon</li>
+<li>Feb 2026: 1 typhoon</li>
+<li>Mar 2026: 2 typhoons</li>
+<li>Apr 2026: 2 typhoons</li>
+<li>May 2026: 3 typhoons</li>
+<li>Jun 2026: 3 typhoons Peak</li>
+<li>Jul 2026: 4 typhoons Peak</li>
+<li>Aug 2026: 5 typhoons Peak</li>
+<li>Sep 2026: 5 typhoons Peak</li>
+<li>Oct 2026: 4 typhoons Peak</li>
+<li>Nov 2026: 3 typhoons Peak</li>
+</ul>
+</div>
+
+<!-- Twitter -->
+<div class="card twitter-container">
+<h3>Latest Updates from Twitter</h3>
+<a class="twitter-timeline" data-height="400" href="https://twitter.com/NDRRMC_PHL?ref_src=twsrc%5Etfw">Tweets by NDRRMC_PHL</a>
+<script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
+</div>
+
+</div>
+</div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script>
+// Clock
+function updateClock(){document.getElementById("clock").innerText=new Date().toLocaleString();}
+setInterval(updateClock,1000);updateClock();
+
+// Cities & API
+const API_KEY="YOUR_OPENWEATHERMAP_API_KEY";
+const cities={
+  Bacolod:{lat:10.6760,lon:122.9509},
+  Silay:{lat:10.7333,lon:123.0000},
+  Talisay:{lat:10.7370,lon:122.9663},
+  Bago:{lat:10.5333,lon:122.8333},
+  Victorias:{lat:10.9000,lon:123.0833},
+  Kabankalan:{lat:9.9900,lon:122.8142}
+};
+const cityHotlines={
+  Bacolod:["DRRMO: (034) 432-3879 / 709-1633","BFP Fire: (034) 434-5022","Police: (034) 432-1865","Red Cross: 435-0324"],
+  Silay:["DRRM: 0918-489-6175","Rescue: 0967-305-4668"],
+  Talisay:["DRRM: (034) 712-6074","Fire Station: (034) 495-6598"],
+  Bago:["Emergency: 0933-693-6444","Rescue: 0927-022-4884"],
+  Victorias:["Rescue: 0921-622-4397","Health Office: (034) 399-3437","Police: (034) 399-2819"],
+  Kabankalan:["DRRM: 0921-233-782","Rescue: 0917-750-1734"]
+};
+
+// Clock & badges
+function showHotlines(city){
+  const ul=document.getElementById("hotlineList");
+  ul.innerHTML="";
+  cityHotlines[city].forEach(h=>{const li=document.createElement("li");li.textContent=h;ul.appendChild(li);});
+}
+function severity(wind){if(wind>120)return"CRITICAL";if(wind>80)return"WARNING";if(wind>40)return"ADVISORY";return"ALLCLEAR";}
+
+// Simulation cache
+const simulatedCache = {};
+function simulated(city){
+  if(simulatedCache[city]) return simulatedCache[city];
+  const wind = Math.random()*140;
+  const data = {
+    temp: (26+Math.random()*4).toFixed(1),
+    wind: wind.toFixed(1),
+    rain: (Math.random()*30).toFixed(1),
+    level: severity(wind),
+    weather: "Simulated Storm Conditions"
+  };
+  simulatedCache[city] = data;
+  return data;
+}
+
+// Load city weather & advisory
+async function loadCity(city){
+  showHotlines(city);
+  const title=document.getElementById("cityTitle");
+  const content=document.getElementById("cityContent");
+  const advisoryList=document.getElementById("advisoryList");
+  title.textContent=`${city} City – Live Status`;
+  content.innerHTML=`<div class="spinner"></div>`;
+  advisoryList.innerHTML=`<li>Loading advisories...</li>`;
+  try{
+    const {lat,lon}=cities[city];
+    const res=await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric`);
+    if(!res.ok)throw"API";
+    const d=await res.json();
+    const wind=d.wind.speed*3.6;
+    const rain=d.rain?d.rain["1h"]||0:0;
+    const level=severity(wind);
+    content.innerHTML=`
+      <p><strong>Weather:</strong> ${d.weather[0].description}</p>
+      <p><strong>Temp:</strong> ${d.main.temp} °C</p>
+      <p><strong>Wind:</strong> ${wind.toFixed(1)} km/h</p>
+      <p><strong>Rainfall:</strong> ${rain} mm</p>
+      <p><strong>Status:</strong> <span class="badge ${level}">${level}</span></p>
+      <small>Last updated: ${new Date().toLocaleTimeString()}</small>
+    `;
+    advisoryList.innerHTML=`
+      <li>Mandatory evacuation for coastal areas if signal #3+</li>
+      <li>Suspension of classes/work may occur during critical weather</li>
+      <li>Health: Boil water, avoid floodwaters, watch for leptospirosis</li>
+    `;
+  }catch{
+    const s=simulated(city);
+    content.innerHTML=`
+      <p><strong>Weather:</strong> ${s.weather}</p>
+      <p><strong>Temp:</strong> ${s.temp} °C</p>
+      <p><strong>Wind:</strong> ${s.wind} km/h</p>
+      <p><strong>Rainfall:</strong> ${s.rain} mm</p>
+      <p><strong>Status:</strong> <span class="badge ${s.level}">${s.level}</span></p>
+      <small>Offline fallback active</small>
+    `;
+    advisoryList.innerHTML=`<li>Simulation mode active.</li>`;
+  }
+}
+
+// Initialize Map
+let map;
+document.addEventListener('DOMContentLoaded',()=>{
+  map = L.map('map').setView([10.6760,122.9509], 9);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
+  Object.values(cities).forEach(c=>{L.marker([c.lat,c.lon]).addTo(map);});
+
+  const cards=document.querySelectorAll('.card');
+  cards.forEach((c,i)=>setTimeout(()=>c.classList.add('visible'),i*200));
+
+  loadCity('Bacolod'); // default
+});
+
+// Request Help Logic
+document.getElementById("requestHelpBtn").addEventListener("click",()=>{
+  document.getElementById("requestConfirm").style.display="block";
+});
+function confirmHelp(){
+  if(navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(pos=>{
+      const {latitude,longitude}=pos.coords;
+      L.circleMarker([latitude,longitude],{color:'red',radius:12,className:'flash-marker'}).addTo(map)
+      document.getElementById("helpStatus").textContent=`Help requested! Location marked on map: ${latitude.toFixed(3)}, ${longitude.toFixed(3)}`;
+      document.getElementById("requestConfirm").style.display="none";
+    });
+  }else alert("Geolocation not supported");
+}
+function cancelHelp(){document.getElementById("requestConfirm").style.display="none";}
+</script>
+</body>
+</html>
